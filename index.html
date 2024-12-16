@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Recommendation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        #results .col-2 {
+            padding: 5px;
+        }
+
+        #results img {
+            width: 200px;
+            height: 200px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            cursor: pointer;
+            object-fit: cover;
+        }
+
+        #search-results {
+            display: none;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <div class="container-fluid p-5 bg-primary text-white text-center">
+        <h1>HỆ THỐNG TÌM KIẾM MÓN ĂN LIÊN QUAN</h1>
+        <p>Từ một bức ảnh món ăn của bạn, chúng tôi sẽ đưa ra các món ăn tương tự!</p>
+    </div>
+
+    <!-- Form Tìm Kiếm -->
+    <div class="container">
+        <div class="text-center mt-5 mb-5">
+            <img id="output" style="width: 250px; height: 250px;">
+        </div>
+        <form id="uploadForm" action="/" method="post" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="formFile" class="form-label">Chọn 1 hình ảnh món ăn</label>
+                <input class="form-control w-100" type="file" name="image" id="formFile" onchange="loadFile(event)" required>
+            </div>
+            <div class="mb-3">
+                <label for="number_result" class="form-label">Số lượng kết quả hiển thị</label>
+                <select class="form-control w-100" name="number_result" id="number_result">
+                    <option value="5" selected>Hiển thị 5 kết quả</option>
+                </select>
+            </div>
+            <div class="text-center row mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <div class="detect">
+                        Tìm Kiếm
+                    </div>
+                    <div class="detecting" style="display: none;">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        Đang tìm kiếm ...
+                    </div>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Kết quả tìm kiếm -->
+    <div id="search-results" class="container" style="margin-bottom: 60px;">
+        <h3 class="food_name">Kết quả tìm kiếm: <span id="food_name_link" style="color: blue; cursor: pointer;" onclick="showFoodDetails(this)"></span></h3>
+        <hr>
+        <div id="results" class="row d-flex justify-content-center"></div>
+    </div>
+
+    <!-- Modal hiển thị thông tin món ăn -->
+    <div class="modal fade" id="foodModal" tabindex="-1" aria-labelledby="foodModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="food_details">Đang tải thông tin...</div>
+                </div>
+                <!-- Nút Đóng ở góc phải dưới -->
+                <div class="modal-footer" style="justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+    <script src="/static/script.js"></script>
+    <script>
+        // Preview Image
+        function loadFile(event) {
+            var output = document.getElementById('output');
+            output.src = URL.createObjectURL(event.target.files[0]);
+            output.onload = function () {
+                URL.revokeObjectURL(output.src);
+            }
+        }
+
+        $(document).ready(function () {
+            $('#uploadForm').on('submit', function (e) {
+                e.preventDefault();
+                var formData = new FormData(this);
+                var number_result = parseInt($('#number_result').val());
+
+                if (!$('#formFile').val()) {
+                    alert("Vui lòng chọn hình ảnh trước khi tìm kiếm.");
+                    return;
+                }
+
+                formData.append("number_result", number_result);
+
+                $('.detect').hide();
+                $('.detecting').show();
+                $('#search-results').hide();
+
+                $.ajax({
+                    url: '/',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    beforeSend: function () {
+                        $('#results').html("<p>Đang tìm kiếm...</p>");
+                    },
+                    success: function (response) {
+                        $('.detecting').hide();
+                        $('.detect').show();
+                        $('#results').html('');
+
+                        if (!response || !response.food_name || !response.list_image_urls) {
+                            alert("Không tìm thấy kết quả nào. Vui lòng thử lại.");
+                            return;
+                        }
+
+                        // Hiển thị tên món ăn nhận diện được
+                        $('#food_name_link').text(response.food_name);
+                        $('#food_name_link').attr('data-food-name', response.food_name);
+
+                        var filteredImages = response.list_image_urls.filter(function (url) {
+                            return url.toLowerCase().includes(response.food_name.toLowerCase().replace(" ", "_"));
+                        });
+
+                        while (filteredImages.length < number_result) {
+                            var randomIndex = Math.floor(Math.random() * response.list_image_urls.length);
+                            var randomImage = response.list_image_urls[randomIndex];
+                            if (!filteredImages.includes(randomImage)) {
+                                filteredImages.push(randomImage);
+                            }
+                        }
+
+                        filteredImages = filteredImages.slice(0, number_result);
+
+                        filteredImages.forEach(function (url) {
+                            $('#results').append(`
+                                <div class="col-2">
+                                    <img src="${url}" alt="Filtered Image" onclick="showFoodDetails(this)">
+                                </div>
+                            `);
+                        });
+
+                        $('#search-results').show();
+                    },
+                    error: function () {
+                        $('.detecting').hide();
+                        $('.detect').show();
+                        $('#results').html("<p>Lỗi khi tìm kiếm kết quả.</p>");
+                        $('#search-results').show();
+                        alert("Có lỗi xảy ra trong quá trình xử lý. Vui lòng thử lại.");
+                    }
+                });
+            });
+
+            // Sự kiện khi nhấn vào tên món ăn
+            $('#food_name_link').on('click', function () {
+                var foodName = $(this).attr('data-food-name');
+                if (foodName) {
+                    showFoodDetails({ dataset: { foodName } });
+                } else {
+                    alert("Không có dữ liệu để hiển thị thông tin món ăn.");
+                }
+            });
+        });
+
+        function showFoodDetails(element) {
+            var foodName = element.dataset.foodName || $('#food_name_link').attr('data-food-name');
+
+            // Kiểm tra dữ liệu foodInfo
+            if (typeof foodInfo === 'undefined' || !foodInfo) {
+                alert("Dữ liệu thông tin món ăn chưa được tải. Vui lòng kiểm tra lại.");
+                return;
+            }
+
+            var foodDetails = foodInfo[foodName.toLowerCase()];
+
+            if (foodDetails) {
+                $('#food_details').html(`
+                    <h5>${foodDetails.title}</h5>
+                    <img src="${foodDetails.image}" alt="${foodDetails.title}" style="width: 100%; height: auto;">
+                    <p>${foodDetails.description}</p>
+                `);
+            } else {
+                $('#food_details').html("<p>Không có thông tin cho món ăn này.</p>");
+            }
+
+            var myModal = new bootstrap.Modal(document.getElementById('foodModal'));
+            myModal.show();
+        }
+    </script>
+</body>
+
+</html>
